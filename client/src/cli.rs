@@ -1186,4 +1186,18 @@ pub enum DeviceSettings {
         #[arg(value_parser, action = ArgAction::Set)]
         enabled: bool,
     },
+
+    /// Turns off the device lighting when the system sleeps
+    LightingOffOnSleep {
+        /// Whether the setting is enabled
+        #[arg(value_parser, action = ArgAction::Set)]
+        enabled: bool,
+    },
+
+    /// Turns off the device lighting when the utility stops, including on system shutdown
+    LightingOffOnShutdown {
+        /// Whether the setting is enabled
+        #[arg(value_parser, action = ArgAction::Set)]
+        enabled: bool,
+    },
 }

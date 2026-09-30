@@ -61,6 +61,9 @@ pub struct Device<'a> {
 
     last_sample_error: Option<String>,
     tap_tempo: VecDeque<Instant>,
+
+    // Set while the lighting is turned off for sleep / shutdown
+    lighting_off: bool,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -228,6 +231,8 @@ impl<'a> Device<'a> {
 
             last_sample_error: None,
             tap_tempo: VecDeque::with_capacity(4),
+
+            lighting_off: false,
         };
 
         device.apply_profile(None).await?;
@@ -283,6 +288,14 @@ impl<'a> Device<'a> {
             .await;
 
         let locked_faders = self.settings.get_device_lock_faders(self.serial()).await;
+        let lighting_off_on_sleep = self
+            .settings
+            .get_device_lighting_off_on_sleep(self.serial())
+            .await;
+        let lighting_off_on_shutdown = self
+            .settings
+            .get_device_lighting_off_on_shutdown(self.serial())
+            .await;
         let vod_mode = self.settings.get_device_vod_mode(self.serial()).await;
 
         let sampler_fade_duration = self.settings.get_sampler_fade_duration(self.serial()).await;
@@ -354,6 +367,8 @@ impl<'a> Device<'a> {
                 enable_monitor_with_fx: monitor_with_fx,
                 reset_sampler_on_clear: sampler_reset_on_clear,
                 lock_faders: locked_faders,
+                lighting_off_on_sleep,
+                lighting_off_on_shutdown,
                 fade_duration: sampler_fade_duration,
                 vod_mode,
             },
@@ -372,6 +387,14 @@ impl<'a> Device<'a> {
             .await;
 
         self.execute_command_list(commands, avoid_save).await;
+
+        if self
+            .settings
+            .get_device_lighting_off_on_shutdown(self.serial())
+            .await
+        {
+            let _ = self.set_lighting_off(true).await;
+        }
     }
 
     pub async fn sleep(&mut self) {
@@ -383,10 +406,22 @@ impl<'a> Device<'a> {
             .await;
 
         self.execute_command_list(commands, false).await;
+
+        if self
+            .settings
+            .get_device_lighting_off_on_sleep(self.serial())
+            .await
+        {
+            let _ = self.set_lighting_off(true).await;
+        }
     }
 
     pub async fn wake(&mut self) {
         debug!("Waking...");
+
+        if self.lighting_off {
+            let _ = self.set_lighting_off(false).await;
+        }
 
         let commands = self
             .settings
@@ -425,6 +460,8 @@ impl<'a> Device<'a> {
                 | GoXLRCommand::SetMonitorWithFx(_)
                 | GoXLRCommand::SetSamplerResetOnClear(_)
                 | GoXLRCommand::SetLockFaders(_)
+                | GoXLRCommand::SetLightingOffOnSleep(_)
+                | GoXLRCommand::SetLightingOffOnShutdown(_)
                 => {
                     if !avoid_write {
                         let _ = self.perform_command(command).await;
@@ -2926,6 +2963,20 @@ impl<'a> Device<'a> {
                 }
             }
 
+            GoXLRCommand::SetLightingOffOnSleep(value) => {
+                self.settings
+                    .set_device_lighting_off_on_sleep(self.serial(), value)
+                    .await;
+                self.settings.save().await;
+            }
+
+            GoXLRCommand::SetLightingOffOnShutdown(value) => {
+                self.settings
+                    .set_device_lighting_off_on_shutdown(self.serial(), value)
+                    .await;
+                self.settings.save().await;
+            }
+
             GoXLRCommand::SetVodMode(value) => {
                 if !self.device_supports_vod_mode().await {
                     warn!("Not Supported?");
@@ -3628,7 +3679,11 @@ impl<'a> Device<'a> {
         let blank_mute = self.is_device_mini() || lock_faders;
 
         let use_1_3_40_format = self.device_supports_animations();
-        let colour_map = self.profile.get_colour_map(use_1_3_40_format, blank_mute);
+        let colour_map = if self.lighting_off {
+            [0; 520]
+        } else {
+            self.profile.get_colour_map(use_1_3_40_format, blank_mute)
+        };
 
         if use_1_3_40_format {
             self.goxlr.set_button_colours_1_3_40(colour_map)?;
@@ -3641,8 +3696,19 @@ impl<'a> Device<'a> {
         Ok(())
     }
 
+    async fn set_lighting_off(&mut self, off: bool) -> Result<()> {
+        debug!("Setting Lighting Off: {}", off);
+        self.lighting_off = off;
+
+        if self.device_supports_animations() {
+            self.load_animation(true).await?;
+        }
+        self.load_colour_map().await
+    }
+
     async fn load_animation(&mut self, map_set: bool) -> Result<()> {
-        let enabled = self.profile.get_animation_mode() != goxlr_types::AnimationMode::None;
+        let enabled = !self.lighting_off
+            && self.profile.get_animation_mode() != goxlr_types::AnimationMode::None;
 
         // This one is kinda weird, we go from profile -> types -> usb..
         let mode = match self.profile.get_animation_mode() {

@@ -307,6 +307,8 @@ pub enum GoXLRCommand {
     SetSamplerResetOnClear(bool),
     SetSamplerFadeDuration(u32),
     SetLockFaders(bool),
+    SetLightingOffOnSleep(bool),
+    SetLightingOffOnShutdown(bool),
     SetVodMode(VodMode),
 
     // These control the current GoXLR 'State'..

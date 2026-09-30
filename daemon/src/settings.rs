@@ -494,6 +494,28 @@ impl SettingsHandle {
         Routable
     }
 
+    pub async fn get_device_lighting_off_on_sleep(&self, device_serial: &str) -> bool {
+        let settings = self.settings.read().await;
+        settings
+            .devices
+            .as_ref()
+            .unwrap()
+            .get(device_serial)
+            .map(|d| d.lighting_off_on_sleep.unwrap_or(false))
+            .unwrap_or(false)
+    }
+
+    pub async fn get_device_lighting_off_on_shutdown(&self, device_serial: &str) -> bool {
+        let settings = self.settings.read().await;
+        settings
+            .devices
+            .as_ref()
+            .unwrap()
+            .get(device_serial)
+            .map(|d| d.lighting_off_on_shutdown.unwrap_or(false))
+            .unwrap_or(false)
+    }
+
     pub async fn get_sampler_reset_on_clear(&self, device_serial: &str) -> bool {
         let settings = self.settings.read().await;
         settings
@@ -666,6 +688,28 @@ impl SettingsHandle {
         entry.vod_mode = Some(setting);
     }
 
+    pub async fn set_device_lighting_off_on_sleep(&self, device_serial: &str, setting: bool) {
+        let mut settings = self.settings.write().await;
+        let entry = settings
+            .devices
+            .as_mut()
+            .unwrap()
+            .entry(device_serial.to_owned())
+            .or_insert_with(DeviceSettings::default);
+        entry.lighting_off_on_sleep = Some(setting);
+    }
+
+    pub async fn set_device_lighting_off_on_shutdown(&self, device_serial: &str, setting: bool) {
+        let mut settings = self.settings.write().await;
+        let entry = settings
+            .devices
+            .as_mut()
+            .unwrap()
+            .entry(device_serial.to_owned())
+            .or_insert_with(DeviceSettings::default);
+        entry.lighting_off_on_shutdown = Some(setting);
+    }
+
     pub async fn set_sampler_reset_on_clear(&self, device_serial: &str, setting: bool) {
         let mut settings = self.settings.write().await;
         let entry = settings
@@ -823,6 +867,10 @@ struct DeviceSettings {
     shutdown_commands: Vec<GoXLRCommand>,
     sleep_commands: Vec<GoXLRCommand>,
     wake_commands: Vec<GoXLRCommand>,
+
+    // Turn off all the device lighting when sleeping / when the utility stops
+    lighting_off_on_sleep: Option<bool>,
+    lighting_off_on_shutdown: Option<bool>,
 }
 
 impl Default for DeviceSettings {
@@ -844,6 +892,9 @@ impl Default for DeviceSettings {
             shutdown_commands: vec![],
             sleep_commands: vec![],
             wake_commands: vec![],
+
+            lighting_off_on_sleep: Some(false),
+            lighting_off_on_shutdown: Some(false),
         }
     }
 }

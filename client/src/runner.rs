@@ -1028,6 +1028,16 @@ pub async fn run_cli() -> Result<()> {
                             .command(&serial, GoXLRCommand::SetLockFaders(*enabled))
                             .await?;
                     }
+                    DeviceSettings::LightingOffOnSleep { enabled } => {
+                        client
+                            .command(&serial, GoXLRCommand::SetLightingOffOnSleep(*enabled))
+                            .await?;
+                    }
+                    DeviceSettings::LightingOffOnShutdown { enabled } => {
+                        client
+                            .command(&serial, GoXLRCommand::SetLightingOffOnShutdown(*enabled))
+                            .await?;
+                    }
                 },
                 SubCommands::Firmware { command } => match command {
                     FirmwareCommands::FirmwareUpdate { path } => {
